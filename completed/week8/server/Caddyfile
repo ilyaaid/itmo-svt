@@ -1,0 +1,48 @@
+aleldm.ru {
+    log {
+        output stdout
+        format json
+    }
+
+    route {
+        @wordpress path /wordpress /wordpress/*
+        header @wordpress {
+            Access-Control-Allow-Origin "*"
+            Access-Control-Allow-Methods "GET,POST,PUT,PATCH,OPTIONS,DELETE"
+            Access-Control-Allow-Headers "Content-Type,Accept,Authorization,X-WP-Nonce,ngrok-skip-browser-warning"
+            -Access-Control-Allow-Credentials
+            defer
+        }
+
+        @wpPreflight {
+            path /wordpress /wordpress/*
+            method OPTIONS
+        }
+        respond @wpPreflight 204
+
+        handle /wordpress {
+            rewrite * /wordpress/index.php
+            reverse_proxy unix//run/php/php8.3-fpm.sock {
+                transport fastcgi {
+                    root /var/www/aleldm
+                    split .php
+                    env REQUEST_URI /wordpress/
+                }
+            }
+        }
+
+        handle /wordpress/* {
+            root * /var/www/aleldm
+            @blocked path /wordpress/wp-config.php /wordpress/.* /wordpress/*/.* /wordpress/wp-content/uploads/*.php
+            respond @blocked 403
+            php_fastcgi unix//run/php/php8.3-fpm.sock {
+                try_files {path} {path}/index.php /wordpress/index.php
+            }
+            file_server
+        }
+
+        handle {
+            reverse_proxy 127.0.0.1:3000
+        }
+    }
+}
